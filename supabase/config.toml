@@ -255,7 +255,7 @@ otp_expiry = 3600
 
 [auth.sms]
 # Allow/disallow new user signups via SMS to your project.
-enable_signup = false
+enable_signup = true #modified
 # If enabled, users need to confirm their phone number before signing in.
 enable_confirmations = false
 # Template for sending OTP to users
@@ -264,8 +264,13 @@ template = "Your code is {{ .Code }}"
 max_frequency = "5s"
 
 # Use pre-defined map of phone number to OTP for testing.
-# [auth.sms.test_otp]
-# 4152127777 = "123456"
+[auth.sms.test_otp] #modified
+4152127777 = "123456" #modified
+33639980001 = "123456"   # Marc Hanna (admin) #modified
+33639980002 = "123456"   # Mariam Girgis #modified
+33639980005 = "123456"   # Bishoy Farag #modified
+33639980013 = "123456"   #modified
+33639980014 = "123456"   #modified
 
 # Configure logged in session timeouts.
 # [auth.sessions]
@@ -275,9 +280,9 @@ max_frequency = "5s"
 # inactivity_timeout = "8h"
 
 # This hook runs before a new user is created and allows developers to reject the request based on the incoming user object.
-# [auth.hook.before_user_created]
-# enabled = true
-# uri = "pg-functions://postgres/auth/before-user-created-hook"
+[auth.hook.before_user_created] #modified
+enabled = true #modified
+uri = "pg-functions://postgres/public/hook_before_user_created" #modified
 
 # This hook runs before a token is issued and allows you to add additional claims based on the authentication method used.
 # [auth.hook.custom_access_token]
