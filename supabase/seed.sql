@@ -17,7 +17,9 @@
 -- ---------------------------------------------------------------------
 insert into public.members (full_name, phone, is_admin) values
   -- Real phones (testers) ------------------------------------------
-  ('Admin Réel',        '+33639980013',  true),   -- e.g. +33612345678
+  ('Daniel Micheal',        '+33786363470',  true),   -- e.g. +33612345678
+  ('Stéphan Shenouda',        '+33758420844',  true),   -- e.g. +33612345678
+
   ('Membre Réel',       '+33639980014', false),
 
   -- Dummy phones ---------------------------------------------------
