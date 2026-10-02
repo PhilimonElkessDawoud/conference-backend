@@ -1,6 +1,7 @@
 -- =====================================================================
 -- Youth conference app — initial schema (Supabase / Postgres)
--- Auth: phone (SMS) OTP, restricted to pre-provisioned members
+-- Auth: phone OTP for registration (restricted to pre-provisioned members),
+--       then phone + password for every later login
 -- Program & chants are static frontend content (no tables)
 -- =====================================================================
 
@@ -22,6 +23,7 @@ create table public.members (
   full_name     text not null,
   auth_user_id  uuid unique references auth.users (id) on delete set null,
   is_admin      boolean not null default false,
+  has_password  boolean not null default false,  -- maintained by trigger on auth.users
   created_at    timestamptz not null default now()
 );
 
@@ -404,6 +406,25 @@ create trigger on_auth_user_created
 after insert on auth.users
 for each row execute function public.link_member_to_auth_user();
 
+-- Registration is complete once the member has set a password.
+-- The frontend reads members.has_password after OTP verification to decide
+-- whether to show the "set your password" screen.
+create function public.sync_member_has_password()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  update public.members
+  set has_password = coalesce(new.encrypted_password, '') <> ''
+  where auth_user_id = new.id;
+  return new;
+end;
+$$;
+
+create trigger on_auth_user_password_changed
+after update of encrypted_password on auth.users
+for each row execute function public.sync_member_has_password();
+
 
 -- =====================================================================
 -- Row Level Security
@@ -539,6 +560,7 @@ grant  execute on function public.revoke_daily_point(bigint)         to authenti
 
 revoke execute on function public.sync_sermon_like_count()   from public, anon, authenticated;
 revoke execute on function public.link_member_to_auth_user() from public, anon, authenticated;
+revoke execute on function public.sync_member_has_password() from public, anon, authenticated;
 
 
 -- =====================================================================
