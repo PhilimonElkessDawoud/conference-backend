@@ -2,13 +2,14 @@
 -- seed.sql — dummy data for local development & API testing
 -- Runs automatically on `supabase start` / `supabase db reset`.
 --
--- Two kinds of phone numbers:
---   1. REAL numbers (placeholders below): for testing the real SMS flow.
---      Replace them before running — the phone check constraint will
---      reject the file until you do.
---   2. DUMMY numbers +33 6 39 98 xx xx: a range reserved for fiction,
---      so no real person receives an SMS. Map them to fixed OTP codes
---      in config.toml ([auth.sms.test_otp]) to log in as any of them.
+-- All phone numbers are DUMMY numbers in the +33 6 39 98 xx xx range,
+-- reserved for fiction, so no real person receives an SMS. Map them to
+-- fixed OTP codes in config.toml ([auth.sms.test_otp]) to log in as them.
+-- To test real SMS delivery later, replace the "Admin Réel" / "Membre Réel"
+-- numbers with real ones (E.164, e.g. +33612345678).
+--
+-- Program slots and dates are relative to today, so after every
+-- `db reset` there is a live daily question and today's program.
 -- =====================================================================
 
 
@@ -16,13 +17,11 @@
 -- Members
 -- ---------------------------------------------------------------------
 insert into public.members (full_name, phone, is_admin) values
-  -- Real phones (testers) ------------------------------------------
-  ('Daniel Micheal',        '+33786363470',  true),   -- e.g. +33612345678
-  ('Stéphan Shenouda',        '+33758420844',  true),   -- e.g. +33612345678
-
+  -- Swap for real numbers to test real SMS delivery ----------------
+  ('Admin Réel',        '+33639980013', true),
   ('Membre Réel',       '+33639980014', false),
 
-  -- Dummy phones ---------------------------------------------------
+  -- Dummy members ---------------------------------------------------
   ('Marc Hanna',        '+33639980001', true),    -- dummy admin
   ('Mariam Girgis',     '+33639980002', false),
   ('Youssef Tadros',    '+33639980003', false),
@@ -34,7 +33,27 @@ insert into public.members (full_name, phone, is_admin) values
   ('Mina Boutros',      '+33639980009', false),
   ('Irini Sobhy',       '+33639980010', false),
   ('Abanoub Ramzy',     '+33639980011', false),
-  ('Verena Nashed',     '+33639980012', false);
+  ('Verena Nashed',     '+33639980012', false),
+  ('Georges Wassef',    '+33639980015', false);   -- deactivated below
+
+-- A deactivated member: cannot register or see any data (PBI-15)
+update public.members set is_active = false where full_name = 'Georges Wassef';
+
+-- Optional fields: church and age (left empty for the others)
+update public.members m set church = v.church, age = v.age
+from (values
+  ('Mariam Girgis',     'Saint-Marc de Lyon',     17),
+  ('Youssef Tadros',    'Saint-Marc de Lyon',     19),
+  ('Sara Mikhail',      'Saint-Georges de Paris', 16),
+  ('Bishoy Farag',      'Saint-Georges de Paris', null),
+  ('Kirollos Shenouda', null,                     22),
+  ('Marc Hanna',        'Saint-Marc de Lyon',     28)
+) as v(full_name, church, age)
+where m.full_name = v.full_name;
+
+-- Profile photos (database paths only; upload files at these paths to see them)
+update public.members set avatar_path = id || '/avatar.webp'
+where full_name in ('Mariam Girgis', 'Sara Mikhail', 'Marc Hanna');
 
 
 -- ---------------------------------------------------------------------
@@ -155,20 +174,48 @@ join public.teams t on t.name = v.team_name and t.type = 'game';
 
 
 -- ---------------------------------------------------------------------
--- Sermon Q&A (sermon keys must match the static program in the frontend)
+-- Program slots (PBI-7, PBI-16): today and tomorrow, no overlaps.
+-- Fixed UUIDs make them easy to call from Postman / tests.
 -- ---------------------------------------------------------------------
-insert into public.sermon_questions (id, sermon_key, body, status, created_at, reviewed_at) values
-  ('00000000-0000-0000-0000-00000000a001', 'day1-evening-sermon',
+insert into public.slots (id, title, type, slot_date, start_time, end_time, place) values
+  ('00000000-0000-0000-0000-00000000b001', 'Accueil & installation', 'other',    current_date,     '14:00', '15:30', 'Hall d''entrée'),
+  ('00000000-0000-0000-0000-00000000b002', 'Ateliers — session 1',    'workshop', current_date,     '15:30', '17:00', 'Salles A, B, C'),
+  ('00000000-0000-0000-0000-00000000b003', 'Jeu de piste',            'game',     current_date,     '17:00', '18:30', 'Parc'),
+  ('00000000-0000-0000-0000-00000000b004', 'Dîner',                   'meal',     current_date,     '19:00', '20:00', 'Réfectoire'),
+  ('00000000-0000-0000-0000-00000000b005', 'Sermon du soir',          'sermon',   current_date,     '20:15', '21:30', 'Grande salle'),
+  ('00000000-0000-0000-0000-00000000b006', 'Louange du matin',        'session',  current_date + 1, '08:30', '09:00', 'Grande salle'),
+  ('00000000-0000-0000-0000-00000000b007', 'Sermon du matin',         'sermon',   current_date + 1, '09:00', '10:15', 'Grande salle'),
+  ('00000000-0000-0000-0000-00000000b008', 'Ateliers — session 2',    'workshop', current_date + 1, '10:30', '12:00', 'Salles A, B, C');
+
+insert into public.slot_teams (slot_id, team_id)
+select v.slot_id::uuid, t.id
+from (values
+  ('00000000-0000-0000-0000-00000000b002', 'Atelier Louange'),
+  ('00000000-0000-0000-0000-00000000b002', 'Atelier Bible'),
+  ('00000000-0000-0000-0000-00000000b002', 'Atelier Service'),
+  ('00000000-0000-0000-0000-00000000b003', 'Saint Mark'),
+  ('00000000-0000-0000-0000-00000000b003', 'Saint George'),
+  ('00000000-0000-0000-0000-00000000b008', 'Atelier Bible'),
+  ('00000000-0000-0000-0000-00000000b008', 'Atelier Service')
+) as v(slot_id, team_name)
+join public.teams t on t.name = v.team_name;
+
+
+-- ---------------------------------------------------------------------
+-- Sermon Q&A, attached to the sermon slots above
+-- ---------------------------------------------------------------------
+insert into public.sermon_questions (id, slot_id, body, status, created_at, reviewed_at) values
+  ('00000000-0000-0000-0000-00000000a001', '00000000-0000-0000-0000-00000000b005',
    'Comment rester fidèle dans la prière quand on ne ressent rien ?', 'approved', now() - interval '5 hours', now() - interval '4 hours'),
-  ('00000000-0000-0000-0000-00000000a002', 'day1-evening-sermon',
+  ('00000000-0000-0000-0000-00000000a002', '00000000-0000-0000-0000-00000000b005',
    'Quelle est la différence entre la foi et l''espérance ?',          'approved', now() - interval '5 hours', now() - interval '4 hours'),
-  ('00000000-0000-0000-0000-00000000a003', 'day1-evening-sermon',
+  ('00000000-0000-0000-0000-00000000a003', '00000000-0000-0000-0000-00000000b005',
    'Comment pardonner à quelqu''un qui ne s''excuse pas ?',            'approved', now() - interval '4 hours', now() - interval '3 hours'),
-  ('00000000-0000-0000-0000-00000000a004', 'day1-evening-sermon',
+  ('00000000-0000-0000-0000-00000000a004', '00000000-0000-0000-0000-00000000b005',
    'Question hors sujet',                                                'rejected', now() - interval '4 hours', now() - interval '3 hours'),
-  ('00000000-0000-0000-0000-00000000a005', 'day2-morning-sermon',
+  ('00000000-0000-0000-0000-00000000a005', '00000000-0000-0000-0000-00000000b007',
    'Pourquoi le jeûne est-il important ?',                              'pending',  now() - interval '30 minutes', null),
-  ('00000000-0000-0000-0000-00000000a006', 'day2-morning-sermon',
+  ('00000000-0000-0000-0000-00000000a006', '00000000-0000-0000-0000-00000000b007',
    'Comment lire la Bible quand on débute ?',                           'pending',  now() - interval '10 minutes', null);
 
 insert into public.sermon_question_authors (question_id, member_id)
@@ -216,6 +263,19 @@ from (values
   ('Verena Nashed', 'photo4.jpg', 'rejected', interval '3 hours')
 ) as v(member_name, file, status, ago)
 join public.members m on m.full_name = v.member_name;
+
+
+-- ---------------------------------------------------------------------
+-- Chants (PBI-11, PBI-18) — database rows only. Upload PDFs at these paths
+-- in the 'chants' bucket (or test the upload flow) to open them.
+-- ---------------------------------------------------------------------
+insert into public.chants (id, title, file_path, sort_order, created_by) values
+  ('00000000-0000-0000-0000-00000000c001', 'Chant d''ouverture',  'chant-ouverture.pdf', 1,
+   (select id from public.members where full_name = 'Marc Hanna')),
+  ('00000000-0000-0000-0000-00000000c002', 'Louange du matin',    'louange-matin.pdf',   2,
+   (select id from public.members where full_name = 'Marc Hanna')),
+  ('00000000-0000-0000-0000-00000000c003', 'Chant de clôture',    'chant-cloture.pdf',   3,
+   (select id from public.members where full_name = 'Marc Hanna'));
 
 
 -- ---------------------------------------------------------------------
