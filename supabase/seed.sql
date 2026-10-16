@@ -178,12 +178,12 @@ join public.teams t on t.name = v.team_name and t.type = 'game';
 -- Fixed UUIDs make them easy to call from Postman / tests.
 -- ---------------------------------------------------------------------
 insert into public.slots (id, title, type, slot_date, start_time, end_time, place) values
-  ('00000000-0000-0000-0000-00000000b001', 'Accueil & installation', 'other',    current_date,     '14:00', '15:30', 'Hall d''entrée'),
+  ('00000000-0000-0000-0000-00000000b001', 'Accueil & installation', 'welcome',  current_date,     '14:00', '15:30', 'Hall d''entrée'),
   ('00000000-0000-0000-0000-00000000b002', 'Ateliers — session 1',    'workshop', current_date,     '15:30', '17:00', 'Salles A, B, C'),
   ('00000000-0000-0000-0000-00000000b003', 'Jeu de piste',            'game',     current_date,     '17:00', '18:30', 'Parc'),
   ('00000000-0000-0000-0000-00000000b004', 'Dîner',                   'meal',     current_date,     '19:00', '20:00', 'Réfectoire'),
   ('00000000-0000-0000-0000-00000000b005', 'Sermon du soir',          'sermon',   current_date,     '20:15', '21:30', 'Grande salle'),
-  ('00000000-0000-0000-0000-00000000b006', 'Louange du matin',        'session',  current_date + 1, '08:30', '09:00', 'Grande salle'),
+  ('00000000-0000-0000-0000-00000000b006', 'Chants du matin',        'chants',   current_date + 1, '08:30', '09:00', 'Grande salle'),
   ('00000000-0000-0000-0000-00000000b007', 'Sermon du matin',         'sermon',   current_date + 1, '09:00', '10:15', 'Grande salle'),
   ('00000000-0000-0000-0000-00000000b008', 'Ateliers — session 2',    'workshop', current_date + 1, '10:30', '12:00', 'Salles A, B, C');
 
