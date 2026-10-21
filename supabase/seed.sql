@@ -289,3 +289,58 @@ from (values
   ('Rappel équipe', 'Rendez-vous devant l''accueil à 14h.',               'Saint Mark', interval '3 hours')
 ) as v(title, body, team_name, ago)
 left join public.teams t on t.name = v.team_name and t.type = 'game';
+
+
+-- ---------------------------------------------------------------------
+-- Grand Jeu (PBI-19): 4 stations, each game team in a different order,
+-- one head-to-head station. Codes/clues are dummy values.
+-- Fixed station UUIDs make them easy to call from Postman.
+-- Mariam (test member) is in Saint Mark: her codes are SM-1 … SM-4.
+-- ---------------------------------------------------------------------
+insert into public.stations (id, name, location) values
+  ('00000000-0000-0000-0000-00000000e001', 'Station du Puits',     'Derrière la chapelle'),
+  ('00000000-0000-0000-0000-00000000e002', 'Station de l''Arche',  'Terrain de foot'),
+  ('00000000-0000-0000-0000-00000000e003', 'Tir à la corde',       'Pelouse principale'),
+  ('00000000-0000-0000-0000-00000000e004', 'Station des Rouleaux', 'Salle B');
+
+insert into public.team_stations (team_id, station_id, visit_order, opponent_team_id)
+select t.id, v.station_id::uuid, v.visit_order,
+       (select id from public.teams where name = v.opponent and type = 'game')
+from (values
+  ('Saint Mark',    '00000000-0000-0000-0000-00000000e001', 1, null),
+  ('Saint Mark',    '00000000-0000-0000-0000-00000000e002', 2, null),
+  ('Saint Mark',    '00000000-0000-0000-0000-00000000e003', 3, 'Saint George'),
+  ('Saint Mark',    '00000000-0000-0000-0000-00000000e004', 4, null),
+  ('Saint George',  '00000000-0000-0000-0000-00000000e002', 1, null),
+  ('Saint George',  '00000000-0000-0000-0000-00000000e001', 2, null),
+  ('Saint George',  '00000000-0000-0000-0000-00000000e003', 3, 'Saint Mark'),
+  ('Saint George',  '00000000-0000-0000-0000-00000000e004', 4, null),
+  ('Saint Mina',    '00000000-0000-0000-0000-00000000e004', 1, null),
+  ('Saint Mina',    '00000000-0000-0000-0000-00000000e003', 2, 'Saint Demiana'),
+  ('Saint Mina',    '00000000-0000-0000-0000-00000000e001', 3, null),
+  ('Saint Mina',    '00000000-0000-0000-0000-00000000e002', 4, null),
+  ('Saint Demiana', '00000000-0000-0000-0000-00000000e004', 1, null),
+  ('Saint Demiana', '00000000-0000-0000-0000-00000000e003', 2, 'Saint Mina'),
+  ('Saint Demiana', '00000000-0000-0000-0000-00000000e002', 3, null),
+  ('Saint Demiana', '00000000-0000-0000-0000-00000000e001', 4, null)
+) as v(team_name, station_id, visit_order, opponent)
+join public.teams t on t.name = v.team_name and t.type = 'game';
+
+-- Code = team initials + station number (e.g. SM-1); clue = a different word per team
+insert into public.team_station_secrets (team_station_id, code, clue)
+select ts.id,
+       upper(left(split_part(t.name, ' ', 1), 1) || left(split_part(t.name, ' ', 2), 1)) || '-' || right(s.id::text, 1),
+       'Indice ' || s.name || ' pour ' || t.name || ' : ' ||
+       (array['la lumière', 'le pain', 'la vigne', 'le berger'])[ts.visit_order]
+from public.team_stations ts
+join public.teams t    on t.id = ts.team_id
+join public.stations s on s.id = ts.station_id;
+
+-- Saint George already won its first station (to see a revealed clue in the seed)
+update public.team_stations set status = 'gagnee'
+where team_id = (select id from public.teams where name = 'Saint George')
+  and visit_order = 1;
+
+insert into public.team_bonus_clues (team_id, clue, revealed)
+select id, 'Bonus pour ' || name || ' : cherchez sous l''autel de pierre', name = 'Saint George'
+from public.teams where type = 'game';
