@@ -1,5 +1,6 @@
 -- =====================================================================
 -- Migration: Grand Jeu (treasure hunt with stations) — PBI-19
+--            + app switches: Grand Jeu opening, maintenance mode — PBI-20
 -- Applies on top of 20261016130000_slot_types.sql.
 --
 -- Model
@@ -16,6 +17,64 @@
 -- read a code, nor a clue before earning it. The bonus clue is NOT stored in
 -- teams because every member can read the teams table.
 -- =====================================================================
+
+-- =====================================================================
+-- App switches (PBI-20): one row, readable by everyone (even before login),
+-- changed by admins only.
+--   grand_jeu_open       false = the Grand Jeu is hidden: members can read
+--                        none of its data and can't enter codes
+--   maintenance          true = the app shows the maintenance page to
+--                        everyone except admins (the database itself keeps
+--                        working, so developers and admins can test the fix)
+--   maintenance_message  text shown on the maintenance page
+--   PATCH /rest/v1/app_settings?id=eq.true  {"grand_jeu_open": true}
+-- =====================================================================
+create table public.app_settings (
+  id                   boolean primary key default true check (id),   -- a single row
+  grand_jeu_open       boolean not null default false,
+  maintenance          boolean not null default false,
+  maintenance_message  text not null default 'L''application est en maintenance. Elle revient très vite !'
+                       check (char_length(trim(maintenance_message)) between 1 and 300),
+  updated_at           timestamptz not null default now(),
+  updated_by           uuid references public.members (id) on delete set null
+);
+insert into public.app_settings default values;
+
+create function public.app_settings_stamp()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  new.id := true;
+  new.updated_at := now();
+  new.updated_by := public.current_member_id();
+  return new;
+end;
+$$;
+
+create trigger app_settings_stamp
+before update on public.app_settings
+for each row execute function public.app_settings_stamp();
+
+create function public.grand_jeu_open()
+returns boolean
+language sql stable security definer set search_path = ''
+as $$
+  select coalesce((select grand_jeu_open from public.app_settings), false);
+$$;
+
+alter table public.app_settings enable row level security;
+create policy "app_settings: everyone reads" on public.app_settings
+  for select to anon, authenticated using (true);
+create policy "app_settings: admin update" on public.app_settings
+  for update to authenticated
+  using ((select public.is_admin())) with check ((select public.is_admin()));
+revoke insert, delete on public.app_settings from anon, authenticated;
+grant select on public.app_settings to anon;
+
+revoke execute on function public.app_settings_stamp() from public, anon, authenticated;
+grant  execute on function public.grand_jeu_open()    to anon, authenticated;
+
 
 create type public.station_status as enum ('non_visitee', 'gagnee', 'terminee');
 -- non_visitee = not done yet · gagnee = code found, clue revealed
@@ -178,6 +237,9 @@ begin
   if v_member is null then
     raise exception 'Not a registered member' using errcode = '42501';
   end if;
+  if not public.grand_jeu_open() then
+    raise exception 'The Grand Jeu is not open yet';
+  end if;
 
   select team_id into v_team
   from public.team_members where member_id = v_member and team_type = 'game';
@@ -253,6 +315,9 @@ declare
 begin
   if v_member is null then
     raise exception 'Not a registered member' using errcode = '42501';
+  end if;
+  if not public.grand_jeu_open() then
+    raise exception 'The Grand Jeu is not open yet';
   end if;
 
   select team_id into v_team
@@ -354,9 +419,13 @@ alter table public.team_station_secrets  enable row level security;
 alter table public.team_bonus_clues      enable row level security;
 alter table public.station_code_attempts enable row level security;
 
+-- While the Grand Jeu is closed (app_settings.grand_jeu_open = false),
+-- members read nothing below; admins always see everything to prepare it.
+
 -- Stations (names + places): every member reads; admins manage
 create policy "stations: read" on public.stations
-  for select to authenticated using ((select public.is_member()));
+  for select to authenticated
+  using ((select public.is_admin()) or ((select public.is_member()) and (select public.grand_jeu_open())));
 create policy "stations: admin write" on public.stations
   for all to authenticated
   using ((select public.is_admin())) with check ((select public.is_admin()));
@@ -366,7 +435,7 @@ create policy "stations: admin write" on public.stations
 -- and complete_station().
 create policy "team_stations: read own team or admin" on public.team_stations
   for select to authenticated
-  using (public.is_team_member(team_id) or (select public.is_admin()));
+  using ((select public.is_admin()) or ((select public.grand_jeu_open()) and public.is_team_member(team_id)));
 create policy "team_stations: admin write" on public.team_stations
   for all to authenticated
   using ((select public.is_admin())) with check ((select public.is_admin()));
@@ -379,7 +448,8 @@ create policy "team_station_secrets: admin only" on public.team_station_secrets
 -- Bonus clue: the team sees it only once revealed; admins manage
 create policy "team_bonus_clues: team once revealed, or admin" on public.team_bonus_clues
   for select to authenticated
-  using ((revealed and public.is_team_member(team_id)) or (select public.is_admin()));
+  using ((select public.is_admin())
+         or (revealed and (select public.grand_jeu_open()) and public.is_team_member(team_id)));
 create policy "team_bonus_clues: admin write" on public.team_bonus_clues
   for all to authenticated
   using ((select public.is_admin())) with check ((select public.is_admin()));
@@ -409,6 +479,7 @@ revoke execute on function public.team_bonus_clues_stamp()         from public, 
 
 -- ---------------------------------------------------------------------
 -- Realtime: a clue revealed by one member appears on teammates' phones,
--- and a revealed bonus clue appears on the team's phones.
+-- a revealed bonus clue appears on the team's phones, and the Grand Jeu
+-- tab / maintenance page appear and disappear without a refresh.
 -- ---------------------------------------------------------------------
-alter publication supabase_realtime add table public.team_stations, public.team_bonus_clues;
+alter publication supabase_realtime add table public.team_stations, public.team_bonus_clues, public.app_settings;
