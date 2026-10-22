@@ -68,10 +68,12 @@ Deno.serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
+  // The page is also logged, so that the members' notification list in the app leads where the push leads.
   const { data: prepared, error: prepError } = await supabase.rpc("prepare_push_notification", {
     p_title: title,
     p_body: body,
     p_target_team_id: targetTeamId,
+    p_url: url,
   });
   if (prepError) {
     const status = prepError.code === "42501" ? 403 : 400;
