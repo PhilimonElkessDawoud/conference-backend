@@ -16,6 +16,7 @@
 
 alter table public.slots drop constraint slots_no_overlap;
 
+
 -- ---------------------------------------------------------------------
 -- The rule, checked for the slot concerned by the written row
 -- ---------------------------------------------------------------------
@@ -90,6 +91,7 @@ create constraint trigger slot_teams_no_team_overlap
 
 revoke execute on function public.check_slot_overlap() from public, anon, authenticated;
 
+
 -- ---------------------------------------------------------------------
 -- Add (p_id null) or edit a slot and replace its teams, in one transaction.
 -- Admins only (the RLS of slots and slot_teams applies). Returns the slot id.
@@ -141,5 +143,4 @@ end;
 $$;
 
 revoke execute on function public.save_slot(uuid, text, public.slot_type, date, time, time, text, uuid[]) from public, anon;
-
 grant execute on function public.save_slot(uuid, text, public.slot_type, date, time, time, text, uuid[]) to authenticated;
