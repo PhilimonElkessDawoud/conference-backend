@@ -39,6 +39,9 @@ insert into public.members (full_name, phone, is_admin) values
 -- A deactivated member: cannot register or see any data (PBI-15)
 update public.members set is_active = false where full_name = 'Georges Wassef';
 
+-- A technical admin: an admin who also has the AI section
+update public.members set is_tech_admin = true where full_name = 'Marc Hanna';
+
 -- Optional fields: church and age (left empty for the others)
 update public.members m set church = v.church, age = v.age
 from (values
